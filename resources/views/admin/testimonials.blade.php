@@ -53,6 +53,7 @@
                 <x-icon name="X" :size="18" />
             </button>
             <h2 class="font-display font-semibold text-white mb-5" x-text="editing?.id ? 'Edit testimonial' : 'New testimonial'"></h2>
+            <template x-if="editing">
             <div class="space-y-3">
                 <input class="input" placeholder="Customer name" x-model="editing.name">
                 <input class="input" placeholder="Role / company (optional)" x-model="editing.role">
@@ -71,6 +72,7 @@
                     <button type="button" class="btn-ghost flex-1" @click="editing = null">Cancel</button>
                 </div>
             </div>
+            </template>
         </div>
     </div>
 </template>

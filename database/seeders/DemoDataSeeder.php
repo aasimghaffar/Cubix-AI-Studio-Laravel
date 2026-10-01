@@ -106,9 +106,7 @@ class DemoDataSeeder extends Seeder
             'engine_ai-summarizer'         => 'openai',
         ];
         foreach ($settings as $key => $value) {
-            if (\App\Models\Setting::where('key', $key)->doesntExist()) {
-                \App\Models\Setting::create(['key' => $key, 'value' => $value, 'group' => 'demo']);
-            }
+            \App\Models\Setting::firstOrCreate(['key' => $key], ['value' => $value, 'group' => 'demo']);
         }
 
         // ── Demo customers with plans and activity (so the dashboard looks alive) ──

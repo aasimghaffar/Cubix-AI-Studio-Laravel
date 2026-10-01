@@ -1,175 +1,367 @@
 # Cubix AI Studio
 
-A single Laravel 12 application — Blade frontend + REST API in one
-codebase, served from one address. There is no separate frontend build:
-Blade pages call the app's own `/api/*` JSON endpoints using the browser
-session, and the compiled CSS/JS are already committed under
-`public/assets/`, so nothing needs to be built before it runs.
+An AI-tools SaaS platform built on **Laravel 12**. Customers sign up, pick a
+subscription plan, and use nine AI workspaces (image generation, writing,
+translation, document Q&A, background removal, text-to-audio, chat,
+rewriting, summarising) against a per-plan credit allowance. An admin panel
+controls everything else: plans, customers, AI providers and keys, pages,
+menus, branding and languages.
+
+It is a single application. The Blade frontend and the JSON API live in one
+codebase and are served from one address — there is no separate frontend to
+build or deploy.
+
+![Home page](screenshots/public/01-home.png)
 
 ---
 
-## 1. Requirements
+## Contents
 
-- **PHP 8.2 or 8.3**, with the extensions Laravel needs: mbstring,
-  pdo_mysql, openssl, tokenizer, xml, ctype, json, bcmath, fileinfo, gd.
-  XAMPP includes all of these by default.
-- **MySQL** — XAMPP's bundled MySQL/MariaDB works fine.
-- **[Composer](https://getcomposer.org)** — PHP's package manager.
-- **Node.js** — *optional*, only needed if you plan to change a Tailwind
-  CSS class and recompile `public/assets/app.css` yourself.
+1. [Features](#1-features)
+2. [Screenshots](#2-screenshots)
+3. [Requirements](#3-requirements)
+4. [System architecture](#4-system-architecture)
+5. [Project structure](#5-project-structure)
+6. [Setup from scratch](#6-setup-from-scratch)
+7. [Configuration after install](#7-configuration-after-install)
+8. [Useful commands](#8-useful-commands)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Going live](#10-going-live)
 
 ---
 
-## 2. Project structure
+## 1. Features
+
+**For customers**
+
+- Nine AI tools, each with its own workspace, result history and credit meter.
+- Subscription plans (monthly and yearly) paid through Stripe or PayPal.
+- Free mode: the admin can open individual tools to signed-in users without
+  a plan, with a daily or monthly usage cap.
+- Email/password sign-up and optional Google sign-in.
+- Account page: profile, current plan and credits, password, email
+  notification preferences.
+- Dark and light themes, five interface languages (English, Spanish, French,
+  Arabic with right-to-left layout, Mandarin Chinese).
+
+**For the admin**
+
+- Dashboard with revenue, subscribers, activity and most-used-tools charts.
+- Packages: prices, billing cycle, per-tool credit limits, discounts,
+  browser-session limits, and private custom packages for one customer.
+- Customers: create, edit, block, assign a plan manually, adjust credits.
+- AI settings: enable/disable tools, edit each tool's form, choose the AI
+  engine per tool, store provider API keys (encrypted), test a key.
+- Content: pages with shortcodes (`[pricing]`, `[tools]`, `[stats]`,
+  `[cta]`), navigation menu, testimonials, contact inbox.
+- Appearance: brand name, logo, colours, header/footer/loader styles.
+- Languages: add a language and machine-translate every string.
+
+**The nine tools**
+
+| Tool | Credit counted as | Free by default |
+|---|---|---|
+| AI Image Generator | 1 per generation | Yes (5 uses) |
+| AI Content Writer | 1 per article | Yes (4 uses) |
+| AI Translator | 1 per translation | No |
+| AI Document Assistant (PDF, DOCX, TXT) | 1 per question | No |
+| AI Background Removal | 1 per image | No |
+| AI Text-to-Audio | 1 per character | No |
+| AI Chat Assistant | 1 per question | No |
+| AI Grammar & Rewriter | 1 per rewrite | No |
+| AI Summarizer | 1 per summary | No |
+
+---
+
+## 2. Screenshots
+
+All screenshots are in [`screenshots/`](screenshots/), taken from a fresh
+install with the demo data.
+
+| Folder | Contents |
+|---|---|
+| [`screenshots/public/`](screenshots/public/) | Home, tools catalogue, pricing, contact, FAQ / Terms / Privacy pages, login, register, the sign-in gate, light theme, Arabic (RTL) and Spanish |
+| [`screenshots/customer/`](screenshots/customer/) | Account page, all nine tool workspaces, pricing while signed in, and the upgrade gate for a customer with no plan |
+| [`screenshots/admin/`](screenshots/admin/) | All 18 admin screens |
+| [`screenshots/responsive/`](screenshots/responsive/) | Home, tools, pricing, login, a workspace and the admin dashboard at phone width |
+
+| Tool workspace | Admin dashboard |
+|---|---|
+| ![Workspace](screenshots/customer/04-workspace-ai-content-writer.png) | ![Admin dashboard](screenshots/admin/01-dashboard.png) |
+
+| Pricing | Upgrade gate (no plan) |
+|---|---|
+| ![Pricing](screenshots/public/03-pricing.png) | ![Gate](screenshots/customer/14-workspace-no-plan-gate.png) |
+
+---
+
+## 3. Requirements
+
+| Requirement | Version | Notes |
+|---|---|---|
+| PHP | **8.4.1 or newer** | See the note below |
+| PHP extensions | — | `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`, `gd`, `curl`, `zip` |
+| Database | MySQL 8 or MariaDB 10.4+ | Tested on MariaDB 10.4.32 (XAMPP) |
+| Composer | 2.x | |
+| Node.js | 18+ | **Optional.** Only to recompile Tailwind CSS after changing a class. Compiled CSS/JS ship in `public/assets/` |
+| Internet access | — | Needed at runtime for AI providers, payments, Google sign-in and auto-translate |
+
+> **PHP version.** `composer.json` declares `php ^8.2`, but the committed
+> `composer.lock` pins Symfony 8 components that require PHP ≥ 8.4.1. With
+> the lock file as shipped, PHP 8.2 or 8.3 stops at boot with *"Your
+> Composer dependencies require a PHP version >= 8.4.1"*. This matters on
+> XAMPP: many XAMPP installs bundle PHP 8.2, which is too old. Either use
+> PHP 8.4 (for example [Laravel Herd](https://herd.laravel.com) or a newer
+> XAMPP), or run `composer update` on your PHP version to re-resolve the
+> dependencies — the second route has not been tested for this project.
+
+**Accounts you will want** (all optional, all configured in the admin panel,
+none in `.env`):
+
+- At least one text AI key — OpenAI, Gemini, Claude, DeepSeek, Mistral or
+  Groq. Image generation works with no key through the free Pollinations
+  engine.
+- Stability AI, Clipdrop or remove.bg for background removal; ElevenLabs or
+  OpenAI for text-to-audio.
+- Stripe and/or PayPal for payments.
+- A Google OAuth client for Google sign-in.
+- SMTP credentials for real email (until then, mail is written to
+  `storage/logs/laravel.log`).
+
+---
+
+## 4. System architecture
+
+### Overview
+
+```mermaid
+flowchart LR
+    Browser["Browser<br/>Blade pages + Alpine.js"]
+
+    subgraph App["Laravel 12 application (one process, one address)"]
+        Web["routes/web.php<br/>Web controllers → Blade views"]
+        Api["routes/api.php<br/>JSON controllers"]
+        MW["Middleware<br/>auth · admin · package.limits"]
+        Svc["Services<br/>AiService · SettingsService<br/>WebContext · NotificationService<br/>AutoTranslateService"]
+        Models["Eloquent models"]
+    end
+
+    DB[("MySQL / MariaDB")]
+    Disk[("storage/app/public<br/>generated images & audio, logo")]
+
+    AI["AI providers<br/>OpenAI · Gemini · Claude · DeepSeek<br/>Mistral · Groq · Stability · Clipdrop<br/>remove.bg · ElevenLabs · Pollinations"]
+    Pay["Stripe · PayPal"]
+    Google["Google OAuth"]
+    Mail["SMTP"]
+
+    Browser -- "page request" --> Web
+    Browser -- "fetch('/api/…') with session cookie" --> Api
+    Web --> Svc
+    Api --> MW --> Svc
+    Svc --> Models --> DB
+    Svc --> Disk
+    Svc -- HTTPS --> AI
+    Api -- HTTPS --> Pay
+    Pay -- "webhook" --> Api
+    Api -- HTTPS --> Google
+    Svc --> Mail
+```
+
+### How the pieces fit
+
+**One app, two route files.** `routes/web.php` returns server-rendered Blade
+pages. `routes/api.php` returns JSON. The pages are thin shells: each
+interactive page declares an [Alpine.js](https://alpinejs.dev) component
+(`x-data="…"`) that loads and saves its data by calling the app's own
+`/api/*` endpoints with `fetch()`.
+
+**Authentication.** Login is a normal Laravel session. The API routes sit
+behind `auth:sanctum`, and `statefulApi()` in `bootstrap/app.php` lets
+Sanctum accept the browser's session cookie, so the pages need no API token.
+Admin routes add the `admin` middleware (`EnsureUserIsAdmin`), which checks
+`users.role`.
+
+**Settings live in the database, not `.env`.** API keys, payment keys,
+branding and the per-tool engine choice are rows in the `settings` table,
+read through `SettingsService` and cached for five minutes. Keys whose name
+contains `_api_key`, `_secret`, `_token` or `_client_id` are encrypted with
+the app key before being stored. `.env` only holds what Laravel needs to
+boot: app key, URL, database and mail.
+
+**Tools are data.** Each tool is a row in `ai_tools` with an `input_schema`
+JSON column describing its form fields. One template,
+`resources/views/workspace.blade.php`, renders every tool from that schema,
+and the same schema validates the request server-side.
+
+### What happens when a customer runs a tool
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (workspace page)
+    participant M as EnforcePackageLimits
+    participant C as ToolController
+    participant A as AiService
+    participant P as AI provider
+    participant D as Database
+
+    B->>M: POST /api/tools/{slug}/process
+    M->>D: active subscription? usage this cycle?
+    alt blocked, no plan and tool not free, or limit reached
+        M-->>B: 402 / 403 with a reason code
+    else allowed
+        M->>C: request + estimated cost
+        C->>C: validate input against the tool's input_schema
+        C->>A: run the tool
+        A->>D: which engine and key for this tool?
+        A->>P: HTTPS call (falls back to another usable engine on failure)
+        P-->>A: result
+        A-->>C: normalised result (files saved to storage/app/public)
+        C->>D: write usage_logs + generations
+        C-->>B: JSON result
+    end
+```
+
+The credit check runs **before** the provider is called, and usage is logged
+only after a successful result. A subscriber's usage is summed from the start
+of their current billing cycle; a free user's is counted per day or per
+month, as set on the tool.
+
+### Billing
+
+- **Stripe**: `BillingController::checkout` creates a Stripe Checkout
+  session over Stripe's REST API (no SDK). Stripe then calls
+  `POST /api/billing/webhook/stripe`; the signature is verified and the
+  subscription is activated, renewed or cancelled. That one route is exempt
+  from CSRF.
+- **PayPal**: a billing plan is created on demand, the customer approves it
+  on PayPal, and `GET /api/billing/paypal/return` activates the
+  subscription.
+- **Manual**: the admin can assign a plan to a customer directly.
+
+### Data model
+
+| Table | Holds |
+|---|---|
+| `users` | Customers and admins (`role`), status/blocked flag, notification preferences |
+| `packages` | Plans: price, billing cycle, `features` JSON (credit limit per tool, `-1` = unlimited), discount, session limit, custom-package owner |
+| `subscriptions` | A user's plan: gateway (`stripe`, `paypal`, `manual`), status, expiry, cancel flag |
+| `ai_tools` | Tool catalogue: slug, icon, `input_schema`, `feature_key`, status, free-mode settings, category |
+| `taxonomies` | Tool categories |
+| `usage_logs` | One row per successful tool run — the source of every credit meter |
+| `generations` | Saved inputs and outputs, shown as each tool's history |
+| `settings` | Key/value configuration (secrets encrypted) |
+| `languages` | Interface languages and their translation dictionaries |
+| `site_pages`, `menu_items` | Admin-managed pages and navigation |
+| `testimonials`, `contact_messages` | Homepage quotes and the contact inbox |
+| `sessions`, `cache`, `jobs`, `personal_access_tokens` | Laravel infrastructure (sessions and cache are stored in the database) |
+
+### Frontend
+
+- **Tailwind CSS 3**, compiled to `public/assets/app.css` and committed.
+- **Alpine.js** for interactivity, **Chart.js** for the admin dashboard —
+  both vendored in `public/assets/`.
+- `public/assets/app.js` holds shared behaviour: theme switching, the splash
+  loader, micro-interactions, the settings-form engine used by the admin
+  key/engine/settings screens.
+- `App\Services\WebContext` gives every view the current language, the
+  `t()` translation helper, branding and the menu.
+
+### Scheduled work
+
+One scheduled command, `subscriptions:send-expiry-reminders`, runs daily at
+09:00 and emails customers whose plan is about to expire. It only runs if
+the server's cron calls `php artisan schedule:run` every minute.
+
+---
+
+## 5. Project structure
 
 ```
 app/
-  Http/Controllers/
-    Web/                     Blade page controllers — SiteController (home,
-                              tools, pricing, contact, /p/{slug} pages,
-                              workspace), AuthController (login, register,
-                              Google sign-in bridge)
-    Api/                     Public JSON endpoints — AccountController,
-                              AuthController, BillingController (checkout,
-                              cancel), ContactController, GoogleAuthController,
-                              LanguagesController, MenuController,
-                              PagesController, TestimonialsController,
-                              ToolController (tool catalog, run, history)
-    Api/Admin/                Admin-only JSON endpoints — Activity, Customer,
-                              Dashboard, Package, Settings, Taxonomy,
-                              ToolManager controllers
-  Models/                    AiTool, ContactMessage, Generation, Language,
-                              MenuItem, Package, Setting, SitePage,
-                              Subscription, Taxonomy, Testimonial, UsageLog,
-                              User
+  Console/Commands/      DemoInstall (demo:install), SendExpiryReminders
+  Http/
+    Controllers/
+      Web/               Blade pages — SiteController, AuthController
+      Api/               JSON — Auth, Account, Billing, Contact, GoogleAuth,
+                         Languages, Menu, Pages, Testimonials, Tool
+      Api/Admin/         Admin JSON — Activity, Customer, Dashboard, Package,
+                         Settings, Taxonomy, ToolManager
+    Middleware/          EnforcePackageLimits, EnsureUserIsAdmin
+  Models/                AiTool, ContactMessage, Generation, Language, MenuItem,
+                         Package, Setting, SitePage, Subscription, Taxonomy,
+                         Testimonial, UsageLog, User
   Services/
-    WebContext.php           Per-request context every Blade view uses:
-                              current language + t() translation lookups,
-                              branding, the nav menu
-    AiService.php            Calls out to whichever AI provider is
-                              configured per tool (OpenAI, Gemini, Claude,
-                              DeepSeek, Mistral, Groq, Stability, Clipdrop,
-                              remove.bg, ElevenLabs, or the free Pollinations
-                              fallback for images)
-    AutoTranslateService.php Registers every translatable string (tool
-                              names, form fields, page titles) so Admin →
-                              Languages → Auto-translate can machine-translate
-                              anything new
-    ContentTranslations.php  Hand-bundled offline translations (Spanish,
-                              French, Arabic, Chinese) for demo content —
-                              tool names, form fields, package names,
-                              Legal/Privacy/FAQ page bodies — with no
-                              internet dependency
-    UiTranslations.php       Bundled translations for all the fixed site
-                              chrome text (buttons, labels, nav)
+    AI/AiService.php     Every AI provider call and the engine fallbacks
+    SettingsService.php  Typed access to the settings table
+    WebContext.php       Per-request language, translations, branding, menu
+    NotificationService.php    Account and plan emails
+    AutoTranslateService.php   Machine translation of UI and content strings
+    ContentTranslations.php, UiTranslations.php, UiStrings.php
+                         Bundled translations so the demo is multilingual offline
+  helpers.php            Global helpers (t(), brand(), …)
 
-resources/views/
-  layouts/                   app.blade.php (public site shell, header/
-                              footer/nav), admin.blade.php (admin shell +
-                              sidebar), bare.blade.php (auth pages)
-  partials/                  Reusable pieces — header variants, footer
-                              variants, loaders, the language switcher,
-                              the tool access gate popup, the pricing grid,
-                              payment logos, the showcase carousel
-  admin/                     All 18 admin pages: dashboard, customers,
-                              messages, shortcodes, subscriptions, usage,
-                              testimonials, taxonomies, tools, tool-editor,
-                              packages, keys, engines, settings, pages,
-                              menu, appearance, languages
-  account.blade.php          Customer account page (profile, plan &
-                              credits, password, notifications)
-  home / tools / pricing /
-  contact / page.blade.php   Public pages — page.blade.php also renders
-                              [pricing] [tools] [stats] [cta] shortcodes
-                              for any admin-created page
-  workspace.blade.php        The actual per-tool workspace customers use
-                              to generate content (dynamic form + results
-                              + history, one template shared by all 9 tools)
-
-public/assets/               Compiled Tailwind CSS (app.css) + all
-                              interactivity (app.js, Alpine.js) — vendored,
-                              nothing to build for a normal run
-routes/web.php               Every Blade page route
-routes/api.php                Every JSON API route (used by Blade's own
-                              fetch() calls; not a separate public API)
-database/migrations/         Schema
-database/seeders/            DatabaseSeeder runs these in order:
-                                1. AiToolSeeder    — the 9 AI tools, the
-                                   default admin account, the 3 packages
-                                2. LanguageSeeder  — the 5 supported
-                                   languages and their base UI strings
-                                3. PagesMenuSeeder — Legal/Terms/Privacy/
-                                   FAQ pages + the site menu
-                                4. DemoDataSeeder  — sample customers,
-                                   testimonials, and demo settings
+bootstrap/app.php        Routing, middleware aliases, CSRF exceptions
+config/                  Standard Laravel configuration
+database/
+  migrations/            22 migrations
+  seeders/               AiToolSeeder → LanguageSeeder → PagesMenuSeeder → DemoDataSeeder
+public/
+  assets/                app.css, app.js, alpine.min.js, chart.umd.js
+  art/                   Illustrations and provider logos
+resources/
+  css/app.css            Tailwind source
+  views/
+    layouts/             app (public site), admin, bare (auth pages)
+    partials/            Header/footer pieces, pricing grid, tool gate, loaders
+    admin/               The admin screens
+    auth/                Login, register, Google bridge
+    home, tools, pricing, contact, page, workspace, account
+routes/
+  web.php                Blade page routes
+  api.php                JSON routes
+  console.php            The schedule
+screenshots/             Screenshots of every part of the product
 ```
-
-### How the frontend actually works
-
-Every interactive Blade page defines an `x-data="somePageFunction()"`
-[Alpine.js](https://alpinejs.dev/) component, whose logic lives either
-inline in that Blade file's `@push('scripts')` block, or in
-`public/assets/app.js` for logic shared across pages (the theme system,
-the settings-form engine used by API Keys/Engines/Settings, the tool
-access gate). These components call the app's own `/api/*` endpoints
-using the browser's session cookie for authentication — there's no
-separate token-based API to configure.
 
 ---
 
-## 3. Setting up on a new computer/server, from nothing
+## 6. Setup from scratch
 
-This assumes nothing is installed yet. Every path below uses
-**`cubix-ai-studio`** as the project folder name — keep that name so
-every command below matches exactly.
+These steps were run on Windows with PHP 8.4 and XAMPP's MariaDB. The
+commands are the same on macOS and Linux.
 
-### Step 1 — Install XAMPP and Composer
+### Step 1 — Install the prerequisites
 
-- XAMPP: https://www.apachefriends.org (default install location: `C:\xampp`)
-- Composer: https://getcomposer.org/Composer-Setup.exe
+- PHP 8.4+ with the extensions listed in [Requirements](#3-requirements)
+- Composer
+- MySQL or MariaDB, running
 
-Open the **XAMPP Control Panel** and click **Start** next to **Apache**
-and **MySQL**.
+Check them:
 
-### Step 2 — Extract the project
-
-Extract the project zip into:
-
-```
-C:\xampp\htdocs\cubix-ai-studio
+```bash
+php -v          # must print 8.4.1 or newer
+composer -V
 ```
 
-That folder should directly contain `artisan`, `app\`, `public\`,
-`routes\`, etc.
+### Step 2 — Get the code and install dependencies
 
-**Note on `.env`:** you'll see `.env.example` in the project but no
-`.env` — that's intentional. `.env` holds secrets (database password, API
-keys) and is never shared; every computer creates its own from the
-example, in Step 4 below.
-
-### Step 3 — Install dependencies
-
-```
-cd C:\xampp\htdocs\cubix-ai-studio
+```bash
+cd cubix-ai-studio
 composer install
 ```
 
-Downloads everything the backend needs into a new `vendor\` folder (a few
-hundred MB — normal, can take a few minutes).
+### Step 3 — Create the environment file
 
-### Step 4 — Set up the environment file
-
-```
-copy .env.example .env
+```bash
+cp .env.example .env          # Windows cmd: copy .env.example .env
 php artisan key:generate
-notepad .env
 ```
 
-Set these values (leave everything else as-is):
+Open `.env` and check these values:
 
-```
-APP_URL=http://localhost/cubix-ai-studio/public
-FRONTEND_URL=http://localhost/cubix-ai-studio/public
+```ini
+APP_URL=http://127.0.0.1:8000
+FRONTEND_URL=http://127.0.0.1:8000
 
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
@@ -179,81 +371,98 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-`root` with an empty password is XAMPP's default MySQL login. `APP_URL`
-and `FRONTEND_URL` must always match each other exactly.
+`APP_URL` and `FRONTEND_URL` must be identical, and must match the address
+you type in the browser exactly — `127.0.0.1` and `localhost` count as
+different sites for cookies and for Google sign-in.
 
-### Step 5 — Enable Apache's URL rewriting (easy to miss)
+### Step 4 — Create the database
 
-XAMPP's Apache ignores Laravel's routing file by default until you turn
-this on — without it, the homepage loads but every other page (tools,
-admin, pricing) returns "Not Found." Open **Notepad as Administrator**
-and edit:
-
-```
-C:\xampp\apache\conf\httpd.conf
+```sql
+CREATE DATABASE cubix_ai CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-Search (`Ctrl+F`) for `AllowOverride`. XAMPP's config often has **more
-than one** `<Directory>` block — make sure **every** occurrence you find
-says:
+Run it in phpMyAdmin, or from a terminal with `mysql -u root -e "…"`.
 
-```apache
-AllowOverride All
-```
+### Step 5 — Build the tables and load the demo data
 
-Also confirm this line is *not* commented out (no `#` at the start):
-
-```apache
-LoadModule rewrite_module modules/mod_rewrite.so
-```
-
-Save, then in the **XAMPP Control Panel**, click **Stop** then **Start**
-next to Apache.
-
-### Step 6 — Create the database
-
-Open `http://localhost/phpmyadmin`, click **New**, name it `cubix_ai`,
-click **Create**.
-
-### Step 7 — Build the database tables and seed data
-
-```
+```bash
 php artisan migrate
 php artisan db:seed
 ```
 
-`db:seed` (no `--class`) runs the full chain described in the structure
-section above — it creates the admin account, the AI tools, languages,
-the Legal/Terms/Privacy/FAQ pages, the menu, and sample demo customers,
-all in one command. Skipping it, or running only one `--class`, is the
-most common reason a fresh install looks empty or has no working admin
-login.
+`db:seed` with no `--class` runs all four seeders in order: the tools, plans
+and admin account; the languages; the pages and menu; then demo customers,
+testimonials and default settings. It is safe to re-run.
 
-### Step 8 — Link storage
+### Step 6 — Link storage
 
-```
+```bash
 php artisan storage:link
 ```
 
-Makes uploaded/generated files (logo, AI-generated images and audio)
-actually viewable in the browser — without this they'll look broken.
+Without this, uploaded logos and generated images and audio show as broken
+links.
 
-### Step 9 — Open the site
+### Step 7 — Run it
 
+```bash
+php artisan serve --host=127.0.0.1 --port=8000
 ```
-http://localhost/cubix-ai-studio/public
-```
 
-| Email | Password | What it is |
+Open **http://127.0.0.1:8000**.
+
+### Demo accounts
+
+| Email | Password | Role |
 |---|---|---|
-| `admin@example.com` | `password` | Admin panel access |
-| `liam@example.com` | `password` | Customer with an active plan |
-| `maya@example.com` | `password` | Customer with no plan (tests the upgrade gate) |
+| `admin@example.com` | `password` | Admin — panel at `/admin` |
+| `liam@example.com` | `password` | Customer on the Starter plan |
+| `fatima@example.com` | `password` | Customer on the Pro plan |
+| `maya@example.com` | `password` | Customer with no plan (shows the upgrade gate) |
 
-### Step 10 — (Optional, for later) Raise PHP's upload limits
+Change the admin password before putting the site anywhere public.
 
-Some tools accept file uploads (documents, images). If a tool complains a
-file is too large, edit `C:\xampp\php\php.ini`:
+### Alternative: serve through XAMPP's Apache
+
+Use this only if Apache's own PHP is 8.4+ (check `http://localhost/dashboard/phpinfo.php`).
+
+1. Put the project in `htdocs` and follow steps 2–6 above.
+2. In `.env` set both `APP_URL` and `FRONTEND_URL` to
+   `http://localhost/cubix-ai-studio/public`.
+3. In `apache/conf/httpd.conf`, set `AllowOverride All` on the `htdocs`
+   `<Directory>` block and make sure
+   `LoadModule rewrite_module modules/mod_rewrite.so` is not commented out.
+   Restart Apache. Without this the home page loads and every other page is
+   "Not Found".
+4. Open `http://localhost/cubix-ai-studio/public`.
+
+### Optional: recompile the CSS
+
+Only after changing Tailwind classes:
+
+```bash
+npm install
+npm run css
+```
+
+---
+
+## 7. Configuration after install
+
+Sign in as the admin and work through these in the panel:
+
+1. **AI Settings → API Keys** — add at least one text provider key so the
+   writing, translation, chat, rewriting, summarising and document tools
+   work. Each key has a *Test* button.
+2. **AI Settings → AI Engines** — choose which provider each tool uses.
+3. **Settings** — currency, Stripe and PayPal keys and mode (test/live),
+   Google sign-in, email notifications, business contact details.
+4. **Packages** — adjust prices and credit limits; add your Stripe price IDs.
+5. **Appearance** — brand name, logo, colours, header/footer/loader style.
+6. **Languages** — enable languages and auto-translate new strings.
+
+For file-upload tools, raise PHP's limits in `php.ini` if large files are
+rejected:
 
 ```ini
 upload_max_filesize = 25M
@@ -262,79 +471,67 @@ max_execution_time = 120
 memory_limit = 256M
 ```
 
-Save, then restart Apache again.
-
 ---
 
-## 4. Applying an update to a site that's already running
+## 8. Useful commands
 
-Different from first-time setup above — **don't** repeat steps 1–6, and
-don't run `composer install` or touch `.env` unless specifically told to.
-
-1. Extract the update, **replacing existing files**.
-2. ```
-   php artisan optimize:clear
-   ```
-   The single most important step, and the one most often missed.
-   Laravel caches routes and views for speed — without clearing that
-   cache, pages can 404 or show up blank even though the new files are
-   correctly in place.
-3. Only if told the update includes new database content:
-   ```
-   php artisan db:seed
-   ```
-   Safe to re-run — it only adds what's missing or updates specific known
-   keys, it doesn't erase your data.
-4. **Hard refresh** your browser: `Ctrl + Shift + R` (a normal refresh
-   can serve a cached copy of the page).
-
----
-
-## 5. Useful commands while developing
-
-```
-php artisan optimize:clear     # clear all caches — run after any .env/route/view change
-php artisan route:list         # see every registered route
-php artisan tinker             # interactive PHP shell with the app booted
-npm install && npm run css     # recompile Tailwind after changing a class (optional)
+```bash
+php artisan serve --port=8000      # run the app
+php artisan optimize:clear         # clear caches — after any .env, route or view change
+php artisan route:list             # every registered route
+php artisan migrate:fresh --seed   # DELETES all data, rebuilds with demo content
+php artisan demo:install           # same reset, plus machine-translates all languages
+php artisan schedule:run           # run due scheduled commands (what cron should call)
+php artisan tinker                 # PHP shell with the app booted
+npm run css                        # recompile Tailwind
 ```
 
 ---
 
-## 6. Troubleshooting
+## 9. Troubleshooting
 
-- **Homepage loads, every other page says "Not Found"** — Step 5 above
-  (Apache `AllowOverride`/`mod_rewrite`) wasn't applied, or Apache wasn't
-  restarted afterward.
-- **A database connection error** — check `DB_DATABASE`/`DB_USERNAME`/
-  `DB_PASSWORD` in `.env` match phpMyAdmin, then `php artisan
-  optimize:clear`.
-- **Admin login doesn't work / pages look empty** — `db:seed` wasn't run,
-  or was run with a specific `--class` instead of the full chain.
-- **Uploaded/generated images look broken** — `php artisan storage:link`
-  was skipped.
-- **A file upload says it's too large** — see Step 10.
-- **A change you made doesn't seem to appear** — `php artisan
-  optimize:clear`, then hard refresh (`Ctrl + Shift + R`).
+| Symptom | Cause and fix |
+|---|---|
+| *"Your Composer dependencies require a PHP version >= 8.4.1"* | The PHP that is running is too old. On machines with several PHPs, check which one `php -v` (CLI) and Apache each use. See [Requirements](#3-requirements). |
+| `Failed to listen on 127.0.0.1:8000` | Another program holds the port, or it was released a moment ago. Find it with `netstat -ano \| findstr :8000`, stop it, wait a few seconds and retry — or use another `--port` and update `APP_URL`/`FRONTEND_URL` to match. On Windows, if the port is free and it still fails, start the server from a different terminal (Git Bash or cmd). |
+| Database connection error | `DB_*` values in `.env` do not match the database, or MySQL is not running. Then `php artisan optimize:clear`. |
+| Admin login fails, or the site looks empty | `php artisan db:seed` was skipped or run with a single `--class`. |
+| Signed in, but tools or admin screens stay empty | `APP_URL` does not match the browser address (`127.0.0.1` vs `localhost`), so the session cookie is not sent to `/api/*`. |
+| Images, audio or the logo are broken | Run `php artisan storage:link`. |
+| A text tool says no engine is set up | No text provider key yet — Admin → AI Settings → API Keys. |
+| Home loads, other pages are "Not Found" (Apache) | `AllowOverride All` / `mod_rewrite` not enabled, or Apache not restarted. |
+| A change does not show up | `php artisan optimize:clear`, then hard-refresh (`Ctrl+Shift+R`). |
 
 ---
 
-## 7. Going live later (a real domain, not just your PC)
+## 10. Going live
 
-1. Point the domain's DNS at your server; the document root is the
-   project's `public\` folder, same idea as Step 5.
-2. In `.env`: `APP_URL`/`FRONTEND_URL` → your real domain with `https://`,
+1. Point the domain at the server; the web root is the project's `public/`
+   folder.
+2. In `.env`: set `APP_URL` and `FRONTEND_URL` to the `https://` domain,
    `APP_ENV=production`, `APP_DEBUG=false`.
-3. Update the **Google OAuth redirect URI** (Google Cloud Console) and
-   the **Stripe/PayPal webhook URLs** to your live domain — the admin
-   Settings page has notes on this too.
-4. Set `MAIL_MAILER` to real SMTP credentials so account/plan emails
-   actually send (currently just written to `storage/logs/laravel.log`).
-5. Get an SSL certificate (most hosts offer free ones via Let's Encrypt).
-6. Once everything above is confirmed working:
-   ```
+3. Change the default admin password and remove the demo customers.
+4. Update the Google OAuth redirect URI and the Stripe webhook URL
+   (`https://your-domain/api/billing/webhook/stripe`) to the live domain,
+   and switch Stripe/PayPal to live mode in Admin → Settings.
+5. Set real SMTP credentials (`MAIL_*`) so account and plan emails are sent.
+6. Add the cron entry for the scheduler:
+   `* * * * * cd /path/to/project && php artisan schedule:run >> /dev/null 2>&1`
+7. Install an SSL certificate.
+8. Cache for speed once everything works:
+
+   ```bash
    php artisan config:cache
    php artisan route:cache
    php artisan view:cache
    ```
-   Any future change still needs `php artisan optimize:clear` again.
+
+   Any later change needs `php artisan optimize:clear` first.
+
+### Updating a running site
+
+1. Replace the files with the new version.
+2. `php artisan migrate` if the update includes new migrations.
+3. `php artisan optimize:clear`.
+4. `php artisan db:seed` only if the update ships new seeded content.
+5. Hard-refresh the browser.
