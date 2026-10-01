@@ -1,0 +1,15 @@
+{
+  "name": "cubix-ai-studio",
+  "private": true,
+  "description": "Dev-only asset build: compiles Tailwind CSS to public/assets/app.css. Buyers do NOT need Node — compiled assets ship in public/.",
+  "scripts": {
+    "css": "tailwindcss -c tailwind.config.cjs -i resources/css/app.css -o public/assets/app.css --minify"
+  },
+  "devDependencies": {
+    "alpinejs": "^3.14.0",
+    "autoprefixer": "^10.4.0",
+    "lucide-static": "^0.453.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0"
+  }
+}
